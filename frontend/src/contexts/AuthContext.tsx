@@ -2,65 +2,18 @@ import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { authService } from '../services/authService';
 import { AuthState, User } from '../types';
 
-// 初期状態
-const initialState: AuthState = {
-  isAuthenticated: false,
-  user: null,
-  loading: true,
-  error: null,
-};
-
-// アクションタイプ
+// 認証アクションの型
 type AuthAction =
   | { type: 'LOGIN_REQUEST' }
   | { type: 'LOGIN_SUCCESS'; payload: User }
   | { type: 'LOGIN_FAILURE'; payload: string }
   | { type: 'LOGOUT' }
-  | { type: 'CLEAR_ERROR' };
+  | { type: 'CLEAR_ERROR' }
+  | { type: 'LOAD_USER_REQUEST' }
+  | { type: 'LOAD_USER_SUCCESS'; payload: User }
+  | { type: 'LOAD_USER_FAILURE'; payload: string };
 
-// リデューサー
-const authReducer = (state: AuthState, action: AuthAction): AuthState => {
-  switch (action.type) {
-    case 'LOGIN_REQUEST':
-      return {
-        ...state,
-        loading: true,
-        error: null,
-      };
-    case 'LOGIN_SUCCESS':
-      return {
-        ...state,
-        isAuthenticated: true,
-        user: action.payload,
-        loading: false,
-        error: null,
-      };
-    case 'LOGIN_FAILURE':
-      return {
-        ...state,
-        isAuthenticated: false,
-        user: null,
-        loading: false,
-        error: action.payload,
-      };
-    case 'LOGOUT':
-      return {
-        ...state,
-        isAuthenticated: false,
-        user: null,
-        loading: false,
-      };
-    case 'CLEAR_ERROR':
-      return {
-        ...state,
-        error: null,
-      };
-    default:
-      return state;
-  }
-};
-
-// コンテキストの作成
+// 認証コンテキストの型
 interface AuthContextType {
   authState: AuthState;
   login: (username: string, password: string) => Promise<void>;
@@ -68,54 +21,105 @@ interface AuthContextType {
   clearError: () => void;
 }
 
+// 初期状態
+const initialState: AuthState = {
+  isAuthenticated: false,
+  user: null,
+  loading: true,
+  error: null
+};
+
+// Reducer関数
+const authReducer = (state: AuthState, action: AuthAction): AuthState => {
+  switch (action.type) {
+    case 'LOGIN_REQUEST':
+    case 'LOAD_USER_REQUEST':
+      return {
+        ...state,
+        loading: true,
+        error: null
+      };
+    case 'LOGIN_SUCCESS':
+    case 'LOAD_USER_SUCCESS':
+      return {
+        ...state,
+        isAuthenticated: true,
+        user: action.payload,
+        loading: false,
+        error: null
+      };
+    case 'LOGIN_FAILURE':
+    case 'LOAD_USER_FAILURE':
+      return {
+        ...state,
+        isAuthenticated: false,
+        user: null,
+        loading: false,
+        error: action.payload
+      };
+    case 'LOGOUT':
+      return {
+        ...state,
+        isAuthenticated: false,
+        user: null,
+        loading: false
+      };
+    case 'CLEAR_ERROR':
+      return {
+        ...state,
+        error: null
+      };
+    default:
+      return state;
+  }
+};
+
+// コンテキストの作成
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // プロバイダーコンポーネント
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [state, dispatch] = useReducer(authReducer, initialState);
+  const [authState, dispatch] = useReducer(authReducer, initialState);
 
-  // 初回レンダリング時にローカルストレージからトークンを確認
+  // アプリ起動時にユーザー情報を取得
   useEffect(() => {
-    const checkAuth = async () => {
+    const loadUser = async () => {
       const token = localStorage.getItem('token');
       
       if (!token) {
-        dispatch({ type: 'LOGOUT' });
+        dispatch({ type: 'LOAD_USER_FAILURE', payload: 'No token found' });
         return;
       }
       
       try {
-        dispatch({ type: 'LOGIN_REQUEST' });
+        dispatch({ type: 'LOAD_USER_REQUEST' });
         const response = await authService.getCurrentUser();
-        dispatch({ type: 'LOGIN_SUCCESS', payload: response.data });
-      } catch (error) {
+        dispatch({ type: 'LOAD_USER_SUCCESS', payload: response.data });
+      } catch (error: any) {
+        dispatch({ type: 'LOAD_USER_FAILURE', payload: error.message });
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
-        dispatch({ type: 'LOGIN_FAILURE', payload: 'セッションが無効です。再度ログインしてください。' });
       }
     };
     
-    checkAuth();
+    loadUser();
   }, []);
 
   // ログイン処理
   const login = async (username: string, password: string) => {
     try {
       dispatch({ type: 'LOGIN_REQUEST' });
-      
       const response = await authService.login(username, password);
-      const { token, refreshToken, user } = response.data;
       
       // トークンをローカルストレージに保存
-      localStorage.setItem('token', token);
-      localStorage.setItem('refreshToken', refreshToken);
+      localStorage.setItem('token', response.token);
+      if (response.refreshToken) {
+        localStorage.setItem('refreshToken', response.refreshToken);
+      }
       
-      dispatch({ type: 'LOGIN_SUCCESS', payload: user });
+      dispatch({ type: 'LOGIN_SUCCESS', payload: response.user });
     } catch (error: any) {
-      dispatch({ 
-        type: 'LOGIN_FAILURE', 
-        payload: error.message || 'ログインに失敗しました。ユーザー名とパスワードを確認してください。' 
-      });
+      dispatch({ type: 'LOGIN_FAILURE', payload: error.message });
     }
   };
 
@@ -126,13 +130,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     dispatch({ type: 'LOGOUT' });
   };
 
-  // エラーをクリア
+  // エラークリア
   const clearError = () => {
     dispatch({ type: 'CLEAR_ERROR' });
   };
 
   return (
-    <AuthContext.Provider value={{ authState: state, login, logout, clearError }}>
+    <AuthContext.Provider value={{ authState, login, logout, clearError }}>
       {children}
     </AuthContext.Provider>
   );
@@ -141,10 +145,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 // カスタムフック
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  
   return context;
 };

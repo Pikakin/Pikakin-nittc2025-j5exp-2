@@ -1,0 +1,9 @@
+{
+  "/api/auth/login": "/login",
+  "/api/auth/me": "/users/1",
+  "/api/master/classes": "/classes",
+  "/api/master/rooms": "/rooms",
+  "/api/schedules/class/:id": "/schedules?classId=:id",
+  "/api/schedules/teacher/:id": "/schedules?teacherId=:id",
+  "/api/schedules/room/:id": "/schedules?roomId=:id"
+}

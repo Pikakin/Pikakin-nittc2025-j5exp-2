@@ -11,9 +11,9 @@ export const authService = {
   // ログイン
   login: async (username: string, password: string) => {
     try {
-      const response = await api.post<{ data: LoginResponse }>('/auth/login', {
+      const response = await api.post<LoginResponse>('/auth/login', {
         username,
-        password,
+        password
       });
       return response.data;
     } catch (error) {
@@ -31,11 +31,24 @@ export const authService = {
     }
   },
   
-  // パスワードリセットリクエスト
+  // パスワード変更
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    try {
+      const response = await api.post<{ success: boolean }>('/auth/change-password', {
+        currentPassword,
+        newPassword
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(handleApiError(error));
+    }
+  },
+  
+  // パスワードリセット要求
   requestPasswordReset: async (email: string) => {
     try {
       const response = await api.post<{ success: boolean }>('/auth/forgot-password', {
-        email,
+        email
       });
       return response.data;
     } catch (error) {
@@ -48,24 +61,11 @@ export const authService = {
     try {
       const response = await api.post<{ success: boolean }>('/auth/reset-password', {
         token,
-        newPassword,
+        newPassword
       });
       return response.data;
     } catch (error) {
       throw new Error(handleApiError(error));
     }
-  },
-  
-  // パスワード変更（ログイン済みユーザー）
-  changePassword: async (currentPassword: string, newPassword: string) => {
-    try {
-      const response = await api.post<{ success: boolean }>('/auth/change-password', {
-        currentPassword,
-        newPassword,
-      });
-      return response.data;
-    } catch (error) {
-      throw new Error(handleApiError(error));
-    }
-  },
+  }
 };
