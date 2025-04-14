@@ -1,14 +1,6 @@
-import axios from 'axios';
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { AuthState, User, UserRole } from '../types';
-
-// 認証コンテキストの型定義
-interface AuthContextType {
-  authState: AuthState;
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  checkAuth: () => Promise<void>;
-}
+import { authService } from '../services/authService';
+import { AuthState, User } from '../types';
 
 // 初期状態
 const initialState: AuthState = {
@@ -18,17 +10,23 @@ const initialState: AuthState = {
   error: null,
 };
 
-// アクション型
+// アクションタイプ
 type AuthAction =
+  | { type: 'LOGIN_REQUEST' }
   | { type: 'LOGIN_SUCCESS'; payload: User }
   | { type: 'LOGIN_FAILURE'; payload: string }
   | { type: 'LOGOUT' }
-  | { type: 'AUTH_CHECKED' }
-  | { type: 'SET_LOADING'; payload: boolean };
+  | { type: 'CLEAR_ERROR' };
 
 // リデューサー
 const authReducer = (state: AuthState, action: AuthAction): AuthState => {
   switch (action.type) {
+    case 'LOGIN_REQUEST':
+      return {
+        ...state,
+        loading: true,
+        error: null,
+      };
     case 'LOGIN_SUCCESS':
       return {
         ...state,
@@ -51,123 +49,102 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
         isAuthenticated: false,
         user: null,
         loading: false,
+      };
+    case 'CLEAR_ERROR':
+      return {
+        ...state,
         error: null,
-      };
-    case 'AUTH_CHECKED':
-      return {
-        ...state,
-        loading: false,
-      };
-    case 'SET_LOADING':
-      return {
-        ...state,
-        loading: action.payload,
       };
     default:
       return state;
   }
 };
 
-// コンテキスト作成
+// コンテキストの作成
+interface AuthContextType {
+  authState: AuthState;
+  login: (username: string, password: string) => Promise<void>;
+  logout: () => void;
+  clearError: () => void;
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// コンテキストプロバイダー
+// プロバイダーコンポーネント
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [authState, dispatch] = useReducer(authReducer, initialState);
+  const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // APIベースURL
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
-
-  // 認証チェック
-  const checkAuth = async (): Promise<void> => {
-    try {
+  // 初回レンダリング時にローカルストレージからトークンを確認
+  useEffect(() => {
+    const checkAuth = async () => {
       const token = localStorage.getItem('token');
+      
       if (!token) {
-        dispatch({ type: 'AUTH_CHECKED' });
+        dispatch({ type: 'LOGOUT' });
         return;
       }
-
-      // トークンをヘッダーに設定
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
-      const response = await axios.get(`${API_URL}/auth/me`);
-      dispatch({ type: 'LOGIN_SUCCESS', payload: response.data.data });
-    } catch (error) {
-      localStorage.removeItem('token');
-      delete axios.defaults.headers.common['Authorization'];
-      dispatch({ type: 'AUTH_CHECKED' });
-    }
-  };
-
-  // ログイン
-  const login = async (username: string, password: string): Promise<void> => {
-    dispatch({ type: 'SET_LOADING', payload: true });
-    try {
-      const response = await axios.post(`${API_URL}/auth/login`, { username, password });
-      const { token, user } = response.data.data;
-      
-      // トークンを保存
-      localStorage.setItem('token', token);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
-      dispatch({ type: 'LOGIN_SUCCESS', payload: user });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.message || '認証に失敗しました';
-      dispatch({ type: 'LOGIN_FAILURE', payload: errorMessage });
-      throw new Error(errorMessage);
-    }
-  };
-
-  // ログアウト
-  const logout = async (): Promise<void> => {
-    try {
-      await axios.post(`${API_URL}/auth/logout`);
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      localStorage.removeItem('token');
-      delete axios.defaults.headers.common['Authorization'];
-      dispatch({ type: 'LOGOUT' });
-    }
-  };
-
-  // 初回マウント時に認証チェック
-  useEffect(() => {
+      try {
+        dispatch({ type: 'LOGIN_REQUEST' });
+        const response = await authService.getCurrentUser();
+        dispatch({ type: 'LOGIN_SUCCESS', payload: response.data });
+      } catch (error) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
+        dispatch({ type: 'LOGIN_FAILURE', payload: 'セッションが無効です。再度ログインしてください。' });
+      }
+    };
+    
     checkAuth();
   }, []);
 
-  // Axiosのデフォルト設定
-  useEffect(() => {
-    // レスポンスインターセプター
-    const responseInterceptor = axios.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        // 401エラーの場合、トークンが無効なのでログアウト
-        if (error.response?.status === 401) {
-          await logout();
-        }
-        return Promise.reject(error);
-      }
-    );
+  // ログイン処理
+  const login = async (username: string, password: string) => {
+    try {
+      dispatch({ type: 'LOGIN_REQUEST' });
+      
+      const response = await authService.login(username, password);
+      const { token, refreshToken, user } = response.data;
+      
+      // トークンをローカルストレージに保存
+      localStorage.setItem('token', token);
+      localStorage.setItem('refreshToken', refreshToken);
+      
+      dispatch({ type: 'LOGIN_SUCCESS', payload: user });
+    } catch (error: any) {
+      dispatch({ 
+        type: 'LOGIN_FAILURE', 
+        payload: error.message || 'ログインに失敗しました。ユーザー名とパスワードを確認してください。' 
+      });
+    }
+  };
 
-    return () => {
-      // クリーンアップ
-      axios.interceptors.response.eject(responseInterceptor);
-    };
-  }, []);
+  // ログアウト処理
+  const logout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    dispatch({ type: 'LOGOUT' });
+  };
+
+  // エラーをクリア
+  const clearError = () => {
+    dispatch({ type: 'CLEAR_ERROR' });
+  };
 
   return (
-    <AuthContext.Provider value={{ authState, login, logout, checkAuth }}>
+    <AuthContext.Provider value={{ authState: state, login, logout, clearError }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
 // カスタムフック
-export const useAuth = (): AuthContextType => {
+export const useAuth = () => {
   const context = useContext(AuthContext);
+  
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
+  
   return context;
 };
