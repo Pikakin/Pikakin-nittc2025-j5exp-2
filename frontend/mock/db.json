@@ -1,0 +1,31 @@
+{
+  "auth": {
+    "login": {
+      "token": "mock-jwt-token",
+      "refreshToken": "mock-refresh-token",
+      "user": {
+        "id": 1,
+        "username": "admin",
+        "name": "管理者",
+        "email": "admin@example.com",
+        "role": "admin"
+      }
+    }
+  },
+  "users": [
+    {
+      "id": 1,
+      "username": "admin",
+      "name": "管理者",
+      "email": "admin@example.com",
+      "role": "admin"
+    },
+    {
+      "id": 2,
+      "username": "teacher1",
+      "name": "教員 太郎",
+      "email": "teacher1@example.com",
+      "role": "teacher"
+    }
+  ]
+}

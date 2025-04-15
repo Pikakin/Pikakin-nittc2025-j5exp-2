@@ -109,17 +109,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (username: string, password: string) => {
     try {
       dispatch({ type: 'LOGIN_REQUEST' });
-      const response = await authService.login(username, password);
+      console.log('AuthContext login - username:', username, 'password:', password);
       
-      // トークンをローカルストレージに保存
-      localStorage.setItem('token', response.token);
-      if (response.refreshToken) {
-        localStorage.setItem('refreshToken', response.refreshToken);
+      const response = await authService.login(username, password);
+      console.log('AuthContext login - response:', response);
+      
+      // ユーザー情報を取得
+      const user = response.user;
+      
+      if (!user) {
+        throw new Error('ユーザー情報が見つかりません');
       }
       
-      dispatch({ type: 'LOGIN_SUCCESS', payload: response.user });
+      dispatch({ type: 'LOGIN_SUCCESS', payload: user });
     } catch (error: any) {
-      dispatch({ type: 'LOGIN_FAILURE', payload: error.message });
+      console.error('AuthContext login - error:', error);
+      dispatch({ type: 'LOGIN_FAILURE', payload: error.message || '認証に失敗しました' });
+      throw error;
     }
   };
 

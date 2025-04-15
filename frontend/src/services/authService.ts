@@ -1,5 +1,5 @@
 import { User } from '../types';
-import { api, handleApiError } from './api';
+import { api } from './api';
 
 interface LoginResponse {
   token: string;
@@ -11,13 +11,39 @@ export const authService = {
   // ログイン
   login: async (username: string, password: string) => {
     try {
-      const response = await api.post<LoginResponse>('/auth/login', {
-        username,
-        password
-      });
-      return response.data;
+      console.log('Sending login request with:', { username, password });
+      const response = await api.post<any>('/auth/login', { username, password });
+      
+      console.log('Login response:', response);
+      
+      // レスポンスが undefined の場合のエラーハンドリング
+      if (!response) {
+        throw new Error('サーバーからのレスポンスがありません');
+      }
+      
+      // レスポンスから直接トークンと情報を取得
+      const { token, refreshToken, user } = response;
+      
+      if (!token) {
+        throw new Error('トークンが見つかりません');
+      }
+      
+      console.log('Extracted data:', { user, token, refreshToken });
+      
+      // トークンをローカルストレージに保存
+      localStorage.setItem('token', token);
+      if (refreshToken) {
+        localStorage.setItem('refreshToken', refreshToken);
+      }
+      
+      return {
+        user,
+        token,
+        refreshToken
+      };
     } catch (error) {
-      throw new Error(handleApiError(error));
+      console.error('Login error:', error);
+      throw error;
     }
   },
   
@@ -26,8 +52,8 @@ export const authService = {
     try {
       const response = await api.get<{ data: User }>('/auth/me');
       return response.data;
-    } catch (error) {
-      throw new Error(handleApiError(error));
+    } catch (error: any) {
+      throw new Error(error.message || '認証情報の取得に失敗しました');
     }
   },
   
@@ -39,8 +65,8 @@ export const authService = {
         newPassword
       });
       return response.data;
-    } catch (error) {
-      throw new Error(handleApiError(error));
+    } catch (error: any) {
+      throw new Error(error.message || 'パスワード変更に失敗しました');
     }
   },
   
@@ -51,8 +77,8 @@ export const authService = {
         email
       });
       return response.data;
-    } catch (error) {
-      throw new Error(handleApiError(error));
+    } catch (error: any) {
+      throw new Error(error.message || 'パスワードリセット要求に失敗しました');
     }
   },
   
@@ -64,8 +90,8 @@ export const authService = {
         newPassword
       });
       return response.data;
-    } catch (error) {
-      throw new Error(handleApiError(error));
+    } catch (error: any) {
+      throw new Error(error.message || 'パスワードリセットに失敗しました');
     }
   }
 };

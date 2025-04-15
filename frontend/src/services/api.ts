@@ -1,7 +1,7 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { ApiResponse, PaginatedResponse } from '../types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 // APIクライアントの設定
 const apiClient = axios.create({
@@ -37,6 +37,37 @@ apiClient.interceptors.response.use(
   }
 );
 
+// APIエラーハンドリング関数
+export const handleApiError = (error: any): string => {
+  if (axios.isAxiosError(error)) {
+    const axiosError = error as AxiosError<any>;
+    
+    // APIからのエラーメッセージがある場合
+    if (axiosError.response?.data?.message) {
+      return axiosError.response.data.message;
+    }
+    
+    // HTTPステータスに基づくエラーメッセージ
+    switch (axiosError.response?.status) {
+      case 400:
+        return 'リクエストが不正です';
+      case 401:
+        return '認証に失敗しました';
+      case 403:
+        return 'アクセス権限がありません';
+      case 404:
+        return 'リソースが見つかりません';
+      case 500:
+        return 'サーバーエラーが発生しました';
+      default:
+        return 'エラーが発生しました';
+    }
+  }
+  
+  // その他のエラー
+  return error.message || 'エラーが発生しました';
+};
+
 // 汎用的なAPI関数
 export const api = {
   // GETリクエスト
@@ -64,9 +95,15 @@ export const api = {
   // POSTリクエスト
   async post<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
     try {
+      console.log(`Sending POST request to ${endpoint} with data:`, data);
       const response = await apiClient.post<ApiResponse<T>>(endpoint, data);
+      console.log(`Response from ${endpoint}:`, response.data);
       return response.data;
     } catch (error: any) {
+      console.error(`Error in POST request to ${endpoint}:`, error);
+      if (error.response) {
+        console.error('Error response data:', error.response.data);
+      }
       throw error.response?.data || error;
     }
   },
