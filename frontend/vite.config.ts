@@ -5,6 +5,8 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 3000,
+    host: true,       // ← 全てのIPアドレスで待ち受け（Docker内で必須）
+    port: 3000,        // ← このポートがDockerで公開されている必要あり
   },
 });
+
