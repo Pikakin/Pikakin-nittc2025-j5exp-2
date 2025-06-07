@@ -10,12 +10,39 @@ export interface User {
 }
 
 // 認証関連の型
+export interface User {
+  id: number;
+  email: string;
+  name: string;
+  role: 'admin' | 'teacher' | 'student';
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AuthState {
   isAuthenticated: boolean;
   user: User | null;
   loading: boolean;
   error: string | null;
 }
+
+// API関連の型
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message: string;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// 時間割関連の型をエクスポート
+export * from './timetable';
+
 
 // 学科・クラス関連の型
 export interface Department {
@@ -120,23 +147,6 @@ export interface Notification {
   message: string;
   isRead: boolean;
   createdAt: string;
-}
-
-// API レスポンス型
-export interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
-
-// ページネーション型
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
 }
 
 // フィルター型

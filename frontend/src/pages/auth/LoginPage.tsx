@@ -12,10 +12,10 @@ export const LoginPage: React.FC = () => {
   const { authState, login, clearError } = useAuth();
   
   // フォーム状態
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [formErrors, setFormErrors] = useState({
-    username: '',
+    email: '',
     password: ''
   });
   
@@ -30,12 +30,15 @@ export const LoginPage: React.FC = () => {
   const validateForm = () => {
     let valid = true;
     const errors = {
-      username: '',
+      email: '',
       password: ''
     };
     
-    if (!username.trim()) {
-      errors.username = 'ユーザー名を入力してください';
+    if (!email.trim()) {
+      errors.email = 'メールアドレスを入力してください';
+      valid = false;
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
+      errors.email = '正しいメールアドレスを入力してください';
       valid = false;
     }
     
@@ -60,8 +63,11 @@ export const LoginPage: React.FC = () => {
       return;
     }
     
+    // デバッグログ追加
+    console.log('Attempting login with:', { email, password });
+    
     // ログイン実行
-    await login(username, password);
+    await login(email, password);
   };
   
   return (
@@ -102,15 +108,16 @@ export const LoginPage: React.FC = () => {
               margin="normal"
               required
               fullWidth
-              id="username"
-              label="ユーザー名"
-              name="username"
-              autoComplete="username"
+              id="email"
+              label="メールアドレス"
+              name="email"
+              type="email"
+              autoComplete="email"
               autoFocus
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              error={!!formErrors.username}
-              helperText={formErrors.username}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              error={!!formErrors.email}
+              helperText={formErrors.email}
               disabled={authState.loading}
             />
             <TextField
@@ -142,12 +149,9 @@ export const LoginPage: React.FC = () => {
               )}
             </Button>
             <Box sx={{ textAlign: 'center', mt: 2 }}>
-              <Link href="#" variant="body2" onClick={(e) => {
-                e.preventDefault();
-                navigate('/forgot-password');
-              }}>
-                パスワードをお忘れですか？
-              </Link>
+              <Typography variant="body2" color="text.secondary">
+                テストユーザー: admin@test.com / password
+              </Typography>
             </Box>
           </Box>
         </Paper>

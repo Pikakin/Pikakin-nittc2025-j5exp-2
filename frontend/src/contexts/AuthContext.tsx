@@ -16,7 +16,7 @@ type AuthAction =
 // 認証コンテキストの型
 interface AuthContextType {
   authState: AuthState;
-  login: (username: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   clearError: () => void;
 }
@@ -106,26 +106,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   // ログイン処理
-  const login = async (username: string, password: string) => {
+  const login = async (email: string, password: string) => {
     try {
       dispatch({ type: 'LOGIN_REQUEST' });
-      console.log('AuthContext login - username:', username, 'password:', password);
+      console.log('AuthContext: Calling authService.login with:', { email, password });
+      const response = await authService.login(email, password);
       
-      const response = await authService.login(username, password);
-      console.log('AuthContext login - response:', response);
-      
-      // ユーザー情報を取得
-      const user = response.user;
-      
-      if (!user) {
-        throw new Error('ユーザー情報が見つかりません');
+      // トークンをローカルストレージに保存
+      localStorage.setItem('token', response.token);
+      if (response.refreshToken) {
+        localStorage.setItem('refreshToken', response.refreshToken);
       }
       
-      dispatch({ type: 'LOGIN_SUCCESS', payload: user });
+      dispatch({ type: 'LOGIN_SUCCESS', payload: response.user });
     } catch (error: any) {
-      console.error('AuthContext login - error:', error);
-      dispatch({ type: 'LOGIN_FAILURE', payload: error.message || '認証に失敗しました' });
-      throw error;
+      console.error('AuthContext: Login error:', error);
+      dispatch({ type: 'LOGIN_FAILURE', payload: error.message });
     }
   };
 

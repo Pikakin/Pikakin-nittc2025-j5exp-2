@@ -1,38 +1,37 @@
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
-import { Box, Button, Container, Typography } from '@mui/material'
 import React from 'react'
-import { Link as RouterLink } from 'react-router-dom'
+import { Container, Typography, Box, Button } from '@mui/material'
+import { useNavigate } from 'react-router-dom'
+import { Home as HomeIcon } from '@mui/icons-material'
 
 export const NotFoundPage: React.FC = () => {
+  const navigate = useNavigate()
+
   return (
-    <Container maxWidth="md">
+    <Container maxWidth="sm">
       <Box
         sx={{
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          minHeight: '80vh',
-          textAlign: 'center',
+          minHeight: '60vh',
+          textAlign: 'center'
         }}
       >
-        <ErrorOutlineIcon sx={{ fontSize: 100, color: 'error.main', mb: 4 }} />
-        <Typography variant="h1" component="h1" gutterBottom>
+        <Typography variant="h1" component="h1" sx={{ fontSize: '6rem', fontWeight: 'bold', color: 'primary.main' }}>
           404
         </Typography>
-        <Typography variant="h4" component="h2" gutterBottom>
+        <Typography variant="h4" component="h2" sx={{ mb: 2 }}>
           ページが見つかりません
         </Typography>
-        <Typography variant="body1" color="text.secondary" paragraph>
-          お探しのページは存在しないか、移動した可能性があります。
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
+          お探しのページは存在しないか、移動された可能性があります。
         </Typography>
         <Button
-          component={RouterLink}
-          to="/dashboard"
           variant="contained"
-          color="primary"
+          startIcon={<HomeIcon />}
+          onClick={() => navigate('/dashboard')}
           size="large"
-          sx={{ mt: 2 }}
         >
           ダッシュボードに戻る
         </Button>

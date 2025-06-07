@@ -7,12 +7,23 @@ interface LoginResponse {
   user: User;
 }
 
+// APIエラーハンドリング関数
+const handleApiError = (error: any): string => {
+  if (error.response?.data?.message) {
+    return error.response.data.message;
+  }
+  if (error.message) {
+    return error.message;
+  }
+  return '予期せぬエラーが発生しました';
+};
+
 export const authService = {
   // ログイン
-  login: async (username: string, password: string) => {
+  login: async (email: string, password: string) => {
     try {
-      console.log('Sending login request with:', { username, password });
-      const response = await api.post<any>('/auth/login', { username, password });
+      console.log('Sending login request with:', { email, password });
+      const response = await api.post<any>('/auth/login', { email, password });
       
       console.log('Login response:', response);
       
@@ -21,14 +32,26 @@ export const authService = {
         throw new Error('サーバーからのレスポンスがありません');
       }
       
-      // レスポンスから直接トークンと情報を取得
-      const { token, refreshToken, user } = response;
+      // レスポンスの構造に応じてデータを取得
+      let userData;
+      let token;
+      let refreshToken;
+      
+      if (response.data) {
+        userData = response.data.user;
+        token = response.data.token;
+        refreshToken = response.data.refreshToken;
+      } else if (response.success && response.data) {
+        userData = response.data.user;
+        token = response.data.token;
+        refreshToken = response.data.refreshToken;
+      }
       
       if (!token) {
         throw new Error('トークンが見つかりません');
       }
       
-      console.log('Extracted data:', { user, token, refreshToken });
+      console.log('Extracted data:', { userData, token, refreshToken });
       
       // トークンをローカルストレージに保存
       localStorage.setItem('token', token);
@@ -37,23 +60,23 @@ export const authService = {
       }
       
       return {
-        user,
+        user: userData,
         token,
         refreshToken
       };
     } catch (error) {
       console.error('Login error:', error);
-      throw error;
+      throw new Error(handleApiError(error));
     }
   },
-  
+
   // 現在のユーザー情報を取得
   getCurrentUser: async () => {
     try {
       const response = await api.get<{ data: User }>('/auth/me');
       return response.data;
-    } catch (error: any) {
-      throw new Error(error.message || '認証情報の取得に失敗しました');
+    } catch (error) {
+      throw new Error(handleApiError(error));
     }
   },
   
@@ -65,8 +88,8 @@ export const authService = {
         newPassword
       });
       return response.data;
-    } catch (error: any) {
-      throw new Error(error.message || 'パスワード変更に失敗しました');
+    } catch (error) {
+      throw new Error(handleApiError(error));
     }
   },
   
@@ -77,8 +100,8 @@ export const authService = {
         email
       });
       return response.data;
-    } catch (error: any) {
-      throw new Error(error.message || 'パスワードリセット要求に失敗しました');
+    } catch (error) {
+      throw new Error(handleApiError(error));
     }
   },
   
@@ -90,8 +113,11 @@ export const authService = {
         newPassword
       });
       return response.data;
-    } catch (error: any) {
-      throw new Error(error.message || 'パスワードリセットに失敗しました');
+    } catch (error) {
+      throw new Error(handleApiError(error));
     }
   }
 };
+
+// handleApiError関数をエクスポート
+export { handleApiError };
