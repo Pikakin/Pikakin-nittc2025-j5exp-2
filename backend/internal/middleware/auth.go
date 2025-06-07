@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"timetable-change-system/internal/services"
+	"kosen-schedule-system/internal/services"
 
 	"github.com/labstack/echo/v4"
 )

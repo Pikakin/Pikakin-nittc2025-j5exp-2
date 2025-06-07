@@ -7,22 +7,39 @@ import (
 	"net/http"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-
-	"timetable-change-system/internal/models"
+	"kosen-schedule-system/internal/api/timetable"
+	"kosen-schedule-system/internal/config"
+	"kosen-schedule-system/internal/models"
+	"kosen-schedule-system/internal/services"
 )
 
 func main() {
-	// Echoインスタンス作成
+	// データベース接続
+	db, err := config.NewDatabase()
+	if err != nil {
+		log.Fatal("Failed to initialize database:", err)
+	}
+	defer db.Close()
+
+	// サービス初期化
+	timetableService := services.NewTimetableService(db.DB)
+	classService := services.NewClassService(db.DB)
+
+	// ハンドラー初期化
+	timetableHandler := timetable.NewHandler(timetableService, classService)
+
+	// Echo初期化
 	e := echo.New()
 
-	// ミドルウェア設定
+	// ミドルウェア
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
 
-	// ヘルスチェックエンドポイント
+	// ヘルスチェック
 	e.GET("/", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]string{
 			"message": "Kosen Schedule System API",
@@ -33,21 +50,28 @@ func main() {
 	// API グループ
 	api := e.Group("/api")
 
-	// 認証エンドポイント
-	auth := api.Group("/auth")
-	auth.POST("/login", handleLogin)
-	auth.GET("/me", handleMe)
+	// 認証エンドポイント（既存）
+	api.POST("/auth/login", handleLogin)
+	api.GET("/auth/me", handleMe)
+
+	// 時間割関連エンドポイント（新規追加）
+	api.GET("/timetables", timetableHandler.GetTimetables)
+	api.GET("/timetables/:id", timetableHandler.GetTimetableByID)
+	api.GET("/timetables/weekly/:class_id", timetableHandler.GetWeeklyTimetable)
+	
+	// クラス関連エンドポイント（新規追加）
+	api.GET("/classes", timetableHandler.GetClasses)
+	api.GET("/classes/:id", timetableHandler.GetClassByID)
 
 	// サーバー起動
-	log.Println("Server starting on port 8080...")
+	log.Println("Server starting on :8080...")
 	e.Logger.Fatal(e.Start(":8080"))
 }
 
-// 修正されたログイン処理
+// 既存の認証関数（変更なし）
 func handleLogin(c echo.Context) error {
 	log.Println("=== Login request received ===")
 	
-	// リクエストボディを直接読み取り
 	body, err := io.ReadAll(c.Request().Body)
 	if err != nil {
 		log.Printf("Error reading request body: %v", err)
@@ -59,7 +83,6 @@ func handleLogin(c echo.Context) error {
 	
 	log.Printf("Raw request body: %s", string(body))
 	
-	// JSONをパース
 	var req models.LoginRequest
 	
 	if err := json.Unmarshal(body, &req); err != nil {
@@ -70,11 +93,8 @@ func handleLogin(c echo.Context) error {
 		})
 	}
 
-	// 受信したデータをログ出力
 	log.Printf("Parsed data - Email: '%s', Password: '%s'", req.Email, req.Password)
-	log.Printf("Email length: %d, Password length: %d", len(req.Email), len(req.Password))
 
-	// 仮の認証チェック
 	if req.Email == "admin@test.com" && req.Password == "password" {
 		log.Printf("✅ Login successful for: %s", req.Email)
 		
@@ -100,7 +120,6 @@ func handleLogin(c echo.Context) error {
 		})
 	}
 
-	// 他の認証パターンも追加
 	validUsers := map[string]map[string]interface{}{
 		"teacher@test.com": {
 			"password": "password",
@@ -141,15 +160,13 @@ func handleLogin(c echo.Context) error {
 		}
 	}
 
-	// 認証失敗の詳細ログ
-	log.Printf("❌ Login failed for email: '%s' with password: '%s'", req.Email, req.Password)
+	log.Printf("❌ Login failed for email: '%s'", req.Email)
 	return c.JSON(http.StatusUnauthorized, models.AuthResponse{
 		Success: false,
 		Message: "Invalid email or password",
 	})
 }
 
-// ユーザー情報取得処理
 func handleMe(c echo.Context) error {
 	user := models.User{
 		ID:        1,

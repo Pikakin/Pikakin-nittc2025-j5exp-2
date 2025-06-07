@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"timetable-change-system/internal/models"
-	"timetable-change-system/internal/services"
+	"kosen-schedule-system/internal/models"
+	"kosen-schedule-system/internal/services"
 
 	"github.com/labstack/echo/v4"
 )

@@ -1,4 +1,4 @@
-module timetable-change-system
+module kosen-schedule-system
 
 go 1.24.4
 

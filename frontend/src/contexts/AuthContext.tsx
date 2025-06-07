@@ -109,7 +109,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string) => {
     try {
       dispatch({ type: 'LOGIN_REQUEST' });
-      console.log('AuthContext: Calling authService.login with:', { email, password });
       const response = await authService.login(email, password);
       
       // トークンをローカルストレージに保存
@@ -120,7 +119,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       dispatch({ type: 'LOGIN_SUCCESS', payload: response.user });
     } catch (error: any) {
-      console.error('AuthContext: Login error:', error);
       dispatch({ type: 'LOGIN_FAILURE', payload: error.message });
     }
   };

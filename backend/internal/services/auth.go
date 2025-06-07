@@ -3,18 +3,24 @@ package services
 import (
 	"database/sql"
 	"errors"
+	"kosen-schedule-system/internal/models"
 	"time"
 
-	"timetable-change-system/internal/config"
-	"timetable-change-system/internal/models"
-
+	"github.com/Masterminds/squirrel"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthService struct {
-	db     *sql.DB
-	config *config.Config
+	db        *sql.DB
+	jwtSecret []byte
+}
+
+func NewAuthService(db *sql.DB) *AuthService {
+	return &AuthService{
+		db:        db,
+		jwtSecret: []byte("your-secret-key"),
+	}
 }
 
 type Claims struct {
@@ -24,234 +30,275 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-func NewAuthService(db *sql.DB, cfg *config.Config) *AuthService {
-	return &AuthService{
-		db:     db,
-		config: cfg,
-	}
-}
-
-// パスワードのハッシュ化
-func (s *AuthService) HashPassword(password string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	return string(bytes), err
-}
-
-// パスワードの検証
-func (s *AuthService) CheckPassword(password, hash string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-	return err == nil
-}
-
-// JWTトークンの生成
-func (s *AuthService) GenerateToken(user *models.User) (string, error) {
-	expirationTime := time.Now().Add(24 * time.Hour)
-	claims := &Claims{
-		UserID: user.ID,
-		Email:  user.Email,
-		Role:   user.Role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expirationTime),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "timetable-system",
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(s.config.JWTSecret))
-}
-
-// リフレッシュトークンの生成
-func (s *AuthService) GenerateRefreshToken(user *models.User) (string, error) {
-	expirationTime := time.Now().Add(7 * 24 * time.Hour) // 7日間
-	claims := &Claims{
-		UserID: user.ID,
-		Email:  user.Email,
-		Role:   user.Role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expirationTime),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "timetable-system-refresh",
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(s.config.JWTSecret))
-}
-
-// JWTトークンの検証
-func (s *AuthService) ValidateToken(tokenString string) (*Claims, error) {
-	claims := &Claims{}
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(s.config.JWTSecret), nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	if !token.Valid {
-		return nil, errors.New("invalid token")
-	}
-
-	return claims, nil
-}
-
-// ユーザー認証
+// Authenticate - ユーザー認証（handler.goで使用）
 func (s *AuthService) Authenticate(email, password string) (*models.User, error) {
-	user := &models.User{}
-	query := `SELECT id, email, password_hash, name, role, created_at, updated_at 
-			  FROM users WHERE email = ?`
-	
-	err := s.db.QueryRow(query, email).Scan(
-		&user.ID, &user.Email, &user.PasswordHash, &user.Name, 
-		&user.Role, &user.CreatedAt, &user.UpdatedAt,
-	)
-	
+	// ユーザーを取得
+	query := squirrel.Select("id", "name", "email", "password_hash", "role", "created_at").
+		From("users").
+		Where(squirrel.Eq{"email": email}).
+		PlaceholderFormat(squirrel.Question)
+
+	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, errors.New("user not found")
-		}
 		return nil, err
 	}
 
-	if !s.CheckPassword(password, user.PasswordHash) {
-		return nil, errors.New("invalid password")
-	}
-
-	return user, nil
-}
-
-// ユーザーIDでユーザー取得
-func (s *AuthService) GetUserByID(userID int) (*models.User, error) {
-	user := &models.User{}
-	query := `SELECT id, email, password_hash, name, role, created_at, updated_at 
-			  FROM users WHERE id = ?`
-	
-	err := s.db.QueryRow(query, userID).Scan(
-		&user.ID, &user.Email, &user.PasswordHash, &user.Name, 
-		&user.Role, &user.CreatedAt, &user.UpdatedAt,
+	var user models.User
+	var passwordHash string
+	err = s.db.QueryRow(sqlQuery, args...).Scan(
+		&user.ID, &user.Name, &user.Email, &passwordHash, &user.Role, &user.CreatedAt,
 	)
-	
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, errors.New("user not found")
+			return nil, errors.New("ユーザーが見つかりません")
 		}
 		return nil, err
-	}
-
-	return user, nil
-}
-
-// ログイン
-func (s *AuthService) Login(email, password string, userService *UserService) (*models.LoginResponse, error) {
-	// ユーザー取得
-	user, err := userService.GetUserByEmail(email)
-	if err != nil {
-		return nil, errors.New("メールアドレスまたはパスワードが間違っています")
 	}
 
 	// パスワード検証
-	if err := userService.VerifyPassword(user.PasswordHash, password); err != nil {
-		return nil, errors.New("メールアドレスまたはパスワードが間違っています")
-	}
-
-	// JWT生成
-	token, err := s.GenerateToken(user)
+	err = bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password))
 	if err != nil {
-		return nil, err
+		return nil, errors.New("パスワードが正しくありません")
 	}
 
-	return &models.LoginResponse{
-		Token: token,
-		User:  user,
-	}, nil
+	return &user, nil
 }
 
-// JWT生成
+// Login - ログイン処理（auth_handler.goで使用）
+func (s *AuthService) Login(email, password string) (*models.User, string, error) {
+	// ユーザーを取得
+	query := squirrel.Select("id", "name", "email", "password_hash", "role", "created_at").
+		From("users").
+		Where(squirrel.Eq{"email": email}).
+		PlaceholderFormat(squirrel.Question)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, "", err
+	}
+
+	var user models.User
+	var passwordHash string
+	err = s.db.QueryRow(sqlQuery, args...).Scan(
+		&user.ID, &user.Name, &user.Email, &passwordHash, &user.Role, &user.CreatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, "", errors.New("ユーザーが見つかりません")
+		}
+		return nil, "", err
+	}
+
+	// パスワード検証
+	err = bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password))
+	if err != nil {
+		return nil, "", errors.New("パスワードが正しくありません")
+	}
+
+	// JWTトークン生成
+	token, err := s.GenerateToken(&user)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return &user, token, nil
+}
+
+// GenerateToken - JWTトークン生成
 func (s *AuthService) GenerateToken(user *models.User) (string, error) {
-	claims := jwt.MapClaims{
-		"user_id":   user.ID,
-		"user_role": user.Role,
-		"exp":       time.Now().Add(time.Hour * 24).Unix(),
+	claims := Claims{
+		UserID: user.ID,
+		Email:  user.Email,
+		Role:   user.Role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(s.jwtSecret))
+	return token.SignedString(s.jwtSecret)
 }
 
-// JWT検証
-func (s *AuthService) VerifyToken(tokenString string) (*jwt.MapClaims, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return []byte(s.jwtSecret), nil
+// GenerateRefreshToken - リフレッシュトークン生成
+func (s *AuthService) GenerateRefreshToken(user *models.User) (string, error) {
+	claims := Claims{
+		UserID: user.ID,
+		Email:  user.Email,
+		Role:   user.Role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)), // 7日間
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(s.jwtSecret)
+}
+
+// ValidateToken - JWTトークン検証
+func (s *AuthService) ValidateToken(tokenString string) (*Claims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		return s.jwtSecret, nil
 	})
 
 	if err != nil {
 		return nil, err
 	}
 
-	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		return &claims, nil
+	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+		return claims, nil
 	}
 
 	return nil, errors.New("無効なトークンです")
 }
 
-// パスワード変更
+// GetUserByID - ユーザー情報取得
+func (s *AuthService) GetUserByID(userID int) (*models.User, error) {
+	query := squirrel.Select("id", "name", "email", "role", "created_at").
+		From("users").
+		Where(squirrel.Eq{"id": userID}).
+		PlaceholderFormat(squirrel.Question)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	var user models.User
+	err = s.db.QueryRow(sqlQuery, args...).Scan(
+		&user.ID, &user.Name, &user.Email, &user.Role, &user.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+// ChangePassword - パスワード変更
 func (s *AuthService) ChangePassword(userID int, currentPassword, newPassword string) error {
-	user, err := s.GetUserByID(userID)
+	// 現在のパスワードを確認
+	query := squirrel.Select("password_hash").
+		From("users").
+		Where(squirrel.Eq{"id": userID}).
+		PlaceholderFormat(squirrel.Question)
+
+	sqlQuery, args, err := query.ToSql()
 	if err != nil {
 		return err
 	}
 
-	if !s.CheckPassword(currentPassword, user.PasswordHash) {
-		return errors.New("current password is incorrect")
+	var currentHash string
+	err = s.db.QueryRow(sqlQuery, args...).Scan(&currentHash)
+	if err != nil {
+		return err
 	}
 
+	// 現在のパスワードを検証
+	err = bcrypt.CompareHashAndPassword([]byte(currentHash), []byte(currentPassword))
+	if err != nil {
+		return errors.New("現在のパスワードが正しくありません")
+	}
+
+	// 新しいパスワードをハッシュ化
 	newHash, err := s.HashPassword(newPassword)
 	if err != nil {
 		return err
 	}
 
-	query := `UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-	_, err = s.db.Exec(query, newHash, userID)
+	// パスワードを更新
+	updateQuery := squirrel.Update("users").
+		Set("password_hash", newHash).
+		Where(squirrel.Eq{"id": userID}).
+		PlaceholderFormat(squirrel.Question)
+
+	updateSQL, updateArgs, err := updateQuery.ToSql()
+	if err != nil {
+		return err
+	}
+
+	_, err = s.db.Exec(updateSQL, updateArgs...)
 	return err
 }
 
-// ユーザー作成（管理者用）
+// CreateUser - ユーザー作成
 func (s *AuthService) CreateUser(email, password, name, role string) (*models.User, error) {
-	// ロールの検証
-	if role != models.RoleAdmin && role != models.RoleTeacher && role != models.RoleStudent {
-		return nil, errors.New("invalid role")
-	}
-
 	// メールアドレスの重複チェック
-	var count int
-	err := s.db.QueryRow("SELECT COUNT(*) FROM users WHERE email = ?", email).Scan(&count)
-	if err != nil {
+	existingUser, err := s.GetUserByEmail(email)
+	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
-	if count > 0 {
-		return nil, errors.New("email already exists")
+	if existingUser != nil {
+		return nil, errors.New("このメールアドレスは既に使用されています")
 	}
 
-	// パスワードのハッシュ化
+	// パスワードをハッシュ化
 	hashedPassword, err := s.HashPassword(password)
 	if err != nil {
 		return nil, err
 	}
 
-	// ユーザーの作成
-	query := `INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)`
-	result, err := s.db.Exec(query, email, hashedPassword, name, role)
+	// ユーザーを作成
+	query := squirrel.Insert("users").
+		Columns("email", "password_hash", "name", "role").
+		Values(email, hashedPassword, name, role).
+		PlaceholderFormat(squirrel.Question)
+
+	sqlQuery, args, err := query.ToSql()
 	if err != nil {
 		return nil, err
 	}
 
-	userID, err := result.LastInsertId()
+	result, err := s.db.Exec(sqlQuery, args...)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.GetUserByID(int(userID))
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+
+	user := &models.User{
+		ID:        int(id),
+		Email:     email,
+		Name:      name,
+		Role:      role,
+		CreatedAt: time.Now(),
+	}
+
+	return user, nil
+}
+
+// GetUserByEmail - メールアドレスでユーザー取得
+func (s *AuthService) GetUserByEmail(email string) (*models.User, error) {
+	query := squirrel.Select("id", "name", "email", "role", "created_at").
+		From("users").
+		Where(squirrel.Eq{"email": email}).
+		PlaceholderFormat(squirrel.Question)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	var user models.User
+	err = s.db.QueryRow(sqlQuery, args...).Scan(
+		&user.ID, &user.Name, &user.Email, &user.Role, &user.CreatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+// HashPassword - パスワードハッシュ化
+func (s *AuthService) HashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return string(bytes), err
 }

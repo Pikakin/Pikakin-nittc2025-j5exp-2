@@ -1,0 +1,28 @@
+
+# 全コンテナを停止・削除
+docker-compose down -v --remove-orphans
+
+# 古いコンテナとイメージを削除
+docker container prune -f
+docker image prune -f
+
+# 未使用のボリュームも削除
+docker volume prune -f
+
+# バックエンドイメージを削除
+docker rmi kosen-schedule-system_backend 2>/dev/null || true
+
+# キャッシュなしで再ビルド
+docker-compose build --no-cache backend
+
+# MariaDBのみ起動
+docker-compose up -d mariadb
+
+# MariaDBの起動完了を待つ
+sleep 30
+
+# MariaDBのログ確認
+docker-compose logs mariadb | tail -5
+
+# バックエンドを起動
+docker-compose up -d backend

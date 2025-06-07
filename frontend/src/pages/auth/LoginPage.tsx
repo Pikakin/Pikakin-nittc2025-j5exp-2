@@ -63,10 +63,10 @@ export const LoginPage: React.FC = () => {
       return;
     }
     
-    // デバッグログ追加
+    // デバッグログ修正
     console.log('Attempting login with:', { email, password });
     
-    // ログイン実行
+    // ログイン実行（emailとして渡す）
     await login(email, password);
   };
   

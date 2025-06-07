@@ -54,10 +54,8 @@ export interface Department {
 export interface Class {
   id: number;
   grade: number;
-  classNumber: number;
-  name: string;
-  departmentId: number;
-  department?: Department;
+  class_name: string;
+  created_at: string;
 }
 
 // 教員関連の型
@@ -83,12 +81,11 @@ export type Term = 'first_semester' | 'second_semester' | 'full_year';
 
 export interface Subject {
   id: number;
-  name: string;
   code: string;
-  term: Term;
-  requiredSessions: number;
-  departmentId: number;
-  department?: Department;
+  name: string;
+  term: 'first' | 'second' | 'full';
+  credits: number;
+  created_at: string;
 }
 
 // 時間割関連の型
@@ -112,6 +109,31 @@ export interface Schedule {
   isOriginal: boolean;
   teachers: Teacher[];
   rooms: Room[];
+}
+
+export interface Timetable {
+  id: number;
+  class_id: number;
+  subject_id: number;
+  teacher_id: number;
+  day: 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday';
+  period: 1 | 2 | 3 | 4;
+  room: string;
+  created_at: string;
+  // リレーション
+  class?: Class;
+  subject?: Subject;
+  teacher?: User;
+}
+
+export interface WeeklyTimetable {
+  class_id: number;
+  class_name: string;
+  schedule: {
+    [key: string]: { // 'monday', 'tuesday', etc.
+      [period: number]: Timetable | null; // 1, 2, 3, 4
+    };
+  };
 }
 
 // 時間割変更申請関連の型
@@ -156,4 +178,27 @@ export interface ScheduleFilter {
   roomId?: number;
   dayOfWeek?: number;
   term?: Term;
+}
+
+export interface TimetableFilter {
+  grade?: number;
+  class_id?: number;
+  class_name?: string;
+  day_of_week?: string;
+  teacher_id?: number;
+}
+
+export interface WeeklyTimetable {
+  [day: string]: {
+    [period: number]: Timetable | null;
+  };
+}
+
+// TimetableFilterParams型を追加（ScheduleListPageで使用）
+export interface TimetableFilterParams {
+  grade?: number;
+  class_id?: number;
+  class_name?: string;
+  day_of_week?: string;
+  teacher_id?: number;
 }

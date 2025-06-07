@@ -1,13 +1,13 @@
-import React from 'react'
-import { Container, Typography, Box, Button } from '@mui/material'
-import { useNavigate } from 'react-router-dom'
-import { Home as HomeIcon } from '@mui/icons-material'
+import React from 'react';
+import { Box, Container, Typography, Button } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
+import { Home as HomeIcon } from '@mui/icons-material';
 
 export const NotFoundPage: React.FC = () => {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
   return (
-    <Container maxWidth="sm">
+    <Container>
       <Box
         sx={{
           display: 'flex',
@@ -15,13 +15,13 @@ export const NotFoundPage: React.FC = () => {
           alignItems: 'center',
           justifyContent: 'center',
           minHeight: '60vh',
-          textAlign: 'center'
+          textAlign: 'center',
         }}
       >
-        <Typography variant="h1" component="h1" sx={{ fontSize: '6rem', fontWeight: 'bold', color: 'primary.main' }}>
+        <Typography variant="h1" component="h1" sx={{ fontSize: '6rem', fontWeight: 'bold', mb: 2 }}>
           404
         </Typography>
-        <Typography variant="h4" component="h2" sx={{ mb: 2 }}>
+        <Typography variant="h4" component="h2" gutterBottom>
           ページが見つかりません
         </Typography>
         <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
@@ -37,5 +37,5 @@ export const NotFoundPage: React.FC = () => {
         </Button>
       </Box>
     </Container>
-  )
-}
+  );
+};

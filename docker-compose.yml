@@ -1,15 +1,14 @@
 version: '3.8'
 
 services:
-  # データベース
   mariadb:
     image: mariadb:10.11
     container_name: timetable_mariadb
     environment:
-      MARIADB_ROOT_PASSWORD: rootpassword
-      MARIADB_DATABASE: timetable_system
-      MARIADB_USER: timetable_user
-      MARIADB_PASSWORD: timetable_password
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: timetable_system
+      MYSQL_USER: timetable_user
+      MYSQL_PASSWORD: timetable_pass
     ports:
       - "3306:3306"
     volumes:
@@ -17,35 +16,43 @@ services:
       - ./backend/migrations:/docker-entrypoint-initdb.d
     networks:
       - timetable_network
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      timeout: 20s
+      retries: 10
 
-  # バックエンド
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    build: ./backend
     container_name: timetable_backend
-    environment:
-      DATABASE_URL: "timetable_user:timetable_password@tcp(mariadb:3306)/timetable_system?charset=utf8mb4&parseTime=True&loc=Local"
-      JWT_SECRET: "your-jwt-secret-key-for-testing"
-      PORT: "8080"
     ports:
       - "8080:8080"
+    environment:
+      # 修正: mariadbサービス名に変更
+      DATABASE_URL: "root:password@tcp(mariadb:3306)/timetable_system?charset=utf8mb4&parseTime=True&loc=Local"
+      DB_HOST: mariadb  # 修正: mysql → mariadb
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: password
+      DB_NAME: timetable_system
+      JWT_SECRET: "your-secret-key-change-this-in-production"
+      PORT: "8080"
     depends_on:
-      - mariadb
+      mariadb:
+        condition: service_healthy
     networks:
       - timetable_network
     restart: unless-stopped
 
-  # フロントエンド
+  # フロントエンドサービス
   frontend:
-    build:
+    build: 
       context: ./frontend
       dockerfile: Dockerfile
     container_name: timetable_frontend
     environment:
       VITE_API_URL: "http://localhost:8080/api"
     ports:
-      - "3000:3000"
+      - "3000:80"
     depends_on:
       - backend
     networks:

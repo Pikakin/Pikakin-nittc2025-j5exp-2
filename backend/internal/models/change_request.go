@@ -61,3 +61,12 @@ type TimetableChangeData struct {
 	NewRoom             string `json:"new_room"`
 	Reason              string `json:"reason"`
 }
+
+// RequestFilter - 申請フィルター
+type RequestFilter struct {
+	Status      *string `json:"status,omitempty"`
+	RequesterID *int    `json:"requester_id,omitempty"`
+	DateFrom    *string `json:"date_from,omitempty"`
+	DateTo      *string `json:"date_to,omitempty"`
+}
+

@@ -1,5 +1,5 @@
-# マルチステージビルドではなく、Goランタイムを含むイメージを使用
-FROM golang:1.24.4-alpine AS base
+# ビルド用のイメージ
+FROM golang:1.24.4-alpine AS builder
 
 # 必要なパッケージをインストール
 RUN apk add --no-cache git ca-certificates tzdata
@@ -17,20 +17,22 @@ RUN go mod download
 COPY . .
 
 # アプリケーションをビルド
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/main.go
 
-# 実行用のイメージ（Goランタイム付き）
-FROM golang:1.24.4-alpine
+# 実行用のイメージ
+FROM alpine:latest
 
 # 必要なパッケージをインストール
-RUN apk add --no-cache ca-certificates tzdata mariadb-client
+RUN apk --no-cache add ca-certificates tzdata
 
 # 作業ディレクトリを設定
 WORKDIR /root/
 
-# ビルドしたバイナリとソースコードをコピー
-COPY --from=base /app/main .
-COPY --from=base /app /app
+# ビルドしたバイナリをコピー
+COPY --from=builder /app/main .
+
+# 修正: マイグレーションファイルをコピー
+COPY --from=builder /app/migrations ./migrations
 
 # ポートを公開
 EXPOSE 8080

@@ -4,41 +4,59 @@ import (
 	"net/http"
 	"strconv"
 
-	"timetable-change-system/internal/models"
-	"timetable-change-system/internal/services"
+	"kosen-schedule-system/internal/models"
+	"kosen-schedule-system/internal/services"
 
 	"github.com/labstack/echo/v4"
 )
 
 type Handler struct {
 	timetableService *services.TimetableService
+	classService     *services.ClassService
 }
 
-func NewHandler(timetableService *services.TimetableService) *Handler {
+func NewHandler(timetableService *services.TimetableService, classService *services.ClassService) *Handler {
 	return &Handler{
 		timetableService: timetableService,
+		classService:     classService,
 	}
 }
 
-// 時間割一覧取得（フィルタリング対応）
+// 時間割一覧取得
 func (h *Handler) GetTimetables(c echo.Context) error {
-	classID, _ := strconv.Atoi(c.QueryParam("class_id"))
-	grade, _ := strconv.Atoi(c.QueryParam("grade"))
-	day := c.QueryParam("day")
+	var filter models.TimetableFilter
 
-	var timetables []*models.Timetable
-	var err error
-
-	if grade > 0 {
-		timetables, err = h.timetableService.GetTimetablesByGrade(grade)
-	} else {
-		timetables, err = h.timetableService.GetTimetables(classID, day)
+	// クエリパラメータからフィルター条件を取得
+	if gradeStr := c.QueryParam("grade"); gradeStr != "" {
+		if grade, err := strconv.Atoi(gradeStr); err == nil {
+			filter.Grade = &grade
+		}
 	}
 
+	if classIDStr := c.QueryParam("class_id"); classIDStr != "" {
+		if classID, err := strconv.Atoi(classIDStr); err == nil {
+			filter.ClassID = &classID
+		}
+	}
+
+	if className := c.QueryParam("class_name"); className != "" {
+		filter.ClassName = &className
+	}
+
+	if dayOfWeek := c.QueryParam("day_of_week"); dayOfWeek != "" {
+		filter.DayOfWeek = &dayOfWeek
+	}
+
+	if teacherIDStr := c.QueryParam("teacher_id"); teacherIDStr != "" {
+		if teacherID, err := strconv.Atoi(teacherIDStr); err == nil {
+			filter.TeacherID = &teacherID
+		}
+	}
+
+	timetables, err := h.timetableService.GetTimetables(filter)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"success": false,
-			"message": "時間割一覧の取得に失敗しました",
 			"error":   err.Error(),
 		})
 	}
@@ -46,142 +64,108 @@ func (h *Handler) GetTimetables(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success": true,
 		"data":    timetables,
-		"message": "時間割一覧を取得しました",
 	})
 }
 
 // 週間時間割取得
 func (h *Handler) GetWeeklyTimetable(c echo.Context) error {
-	classID, err := strconv.Atoi(c.Param("class_id"))
+	classIDStr := c.Param("class_id")
+	classID, err := strconv.Atoi(classIDStr)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]interface{}{
 			"success": false,
-			"message": "無効なクラスIDです",
+			"error":   "Invalid class_id",
 		})
 	}
 
-	weeklyTimetable, err := h.timetableService.GetWeeklyTimetable(classID)
+	weekly, err := h.timetableService.GetWeeklyTimetable(classID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"success": false,
-			"message": "週間時間割の取得に失敗しました",
 			"error":   err.Error(),
 		})
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success": true,
-		"data":    weeklyTimetable,
-		"message": "週間時間割を取得しました",
+		"data":    weekly,
 	})
 }
 
-// 時間割取得
-func (h *Handler) GetTimetable(c echo.Context) error {
-	id, err := strconv.Atoi(c.Param("id"))
+// クラス一覧取得
+func (h *Handler) GetClasses(c echo.Context) error {
+	classes, err := h.classService.GetClasses()
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
 			"success": false,
-			"message": "無効なIDです",
+			"error":   err.Error(),
 		})
 	}
 
-	timetable, err := h.timetableService.GetTimetableByID(id)
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    classes,
+	})
+}
+
+// 時間割詳細取得
+func (h *Handler) GetTimetableByID(c echo.Context) error {
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"error":   "Invalid timetable ID",
+		})
+	}
+
+	// 単一の時間割を取得するためのフィルター
+	filter := models.TimetableFilter{}
+	timetables, err := h.timetableService.GetTimetables(filter)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+	}
+
+	// IDで検索
+	for _, timetable := range timetables {
+		if timetable.ID == id {
+			return c.JSON(http.StatusOK, map[string]interface{}{
+				"success": true,
+				"data":    timetable,
+			})
+		}
+	}
+
+	return c.JSON(http.StatusNotFound, map[string]interface{}{
+		"success": false,
+		"error":   "Timetable not found",
+	})
+}
+
+// クラス詳細取得
+func (h *Handler) GetClassByID(c echo.Context) error {
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"error":   "Invalid class ID",
+		})
+	}
+
+	class, err := h.classService.GetClassByID(id)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, map[string]interface{}{
 			"success": false,
-			"message": "時間割が見つかりません",
-		})
-	}
-
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"success": true,
-		"data":    timetable,
-		"message": "時間割を取得しました",
-	})
-}
-
-// 時間割作成
-func (h *Handler) CreateTimetable(c echo.Context) error {
-	var req models.CreateTimetableRequest
-	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"success": false,
-			"message": "リクエストデータが無効です",
-		})
-	}
-
-	timetable, err := h.timetableService.CreateTimetable(&req)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"success": false,
-			"message": "時間割の作成に失敗しました",
-			"error":   err.Error(),
-		})
-	}
-
-	return c.JSON(http.StatusCreated, map[string]interface{}{
-		"success": true,
-		"data":    timetable,
-		"message": "時間割を作成しました",
-	})
-}
-
-// 時間割更新
-func (h *Handler) UpdateTimetable(c echo.Context) error {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"success": false,
-			"message": "無効なIDです",
-		})
-	}
-
-	var req models.UpdateTimetableRequest
-	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"success": false,
-			"message": "リクエストデータが無効です",
-		})
-	}
-
-	timetable, err := h.timetableService.UpdateTimetable(id, &req)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"success": false,
-			"message": "時間割の更新に失敗しました",
 			"error":   err.Error(),
 		})
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success": true,
-		"data":    timetable,
-		"message": "時間割を更新しました",
-	})
-}
-
-// 時間割削除
-func (h *Handler) DeleteTimetable(c echo.Context) error {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"success": false,
-			"message": "無効なIDです",
-		})
-	}
-
-	err = h.timetableService.DeleteTimetable(id)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
-			"success": false,
-			"message": "時間割の削除に失敗しました",
-			"error":   err.Error(),
-		})
-	}
-
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"success": true,
-		"message": "時間割を削除しました",
+		"data":    class,
 	})
 }

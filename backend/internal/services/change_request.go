@@ -1,12 +1,10 @@
 package services
 
 import (
-	"database/sql"
+	"database/sql" // この行を確認
 	"encoding/json"
-	"fmt"
+	"kosen-schedule-system/internal/models"
 	"time"
-
-	"timetable-change-system/internal/models"
 
 	"github.com/Masterminds/squirrel"
 )
@@ -19,287 +17,198 @@ func NewChangeRequestService(db *sql.DB) *ChangeRequestService {
 	return &ChangeRequestService{db: db}
 }
 
-// 申請一覧取得
-func (s *ChangeRequestService) GetChangeRequests(requesterID int, status string, limit, offset int) ([]*models.ChangeRequest, int, error) {
-	query := squirrel.Select(
-		"cr.id", "cr.requester_id", "cr.title", "cr.description", "cr.status", "cr.request_data",
-		"cr.approver_id", "cr.approved_at", "cr.created_at", "cr.updated_at",
-		"u1.name", "u1.email",
-		"u2.name", "u2.email",
-	).
-		From("change_requests cr").
-		LeftJoin("users u1 ON cr.requester_id = u1.id").
-		LeftJoin("users u2 ON cr.approver_id = u2.id").
-		OrderBy("cr.created_at DESC").
+// CreateChangeRequest - 変更申請作成
+func (s *ChangeRequestService) CreateChangeRequest(request *models.ChangeRequest) error {
+	// request_dataをJSONに変換
+	requestDataJSON, err := json.Marshal(request.RequestData)
+	if err != nil {
+		return err
+	}
+
+	query := squirrel.Insert("change_requests").
+		Columns("requester_id", "status", "request_data", "created_at", "updated_at").
+		Values(request.RequesterID, request.Status, string(requestDataJSON), time.Now(), time.Now()).
 		PlaceholderFormat(squirrel.Question)
 
-	if requesterID > 0 {
-		query = query.Where(squirrel.Eq{"cr.requester_id": requesterID})
-	}
-	if status != "" {
-		query = query.Where(squirrel.Eq{"cr.status": status})
-	}
-
-	// 総数取得
-	countQuery := squirrel.Select("COUNT(*)").From("change_requests cr").PlaceholderFormat(squirrel.Question)
-	if requesterID > 0 {
-		countQuery = countQuery.Where(squirrel.Eq{"requester_id": requesterID})
-	}
-	if status != "" {
-		countQuery = countQuery.Where(squirrel.Eq{"status": status})
-	}
-
-	countSql, countArgs, err := countQuery.ToSql()
+	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, 0, err
+		return err
 	}
 
-	var total int
-	err = s.db.QueryRow(countSql, countArgs...).Scan(&total)
+	result, err := s.db.Exec(sqlQuery, args...)
 	if err != nil {
-		return nil, 0, err
+		return err
 	}
 
-	// データ取得
-	query = query.Limit(uint64(limit)).Offset(uint64(offset))
-	sql, args, err := query.ToSql()
+	id, err := result.LastInsertId()
 	if err != nil {
-		return nil, 0, err
+		return err
 	}
 
-	rows, err := s.db.Query(sql, args...)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer rows.Close()
-
-	var requests []*models.ChangeRequest
-	for rows.Next() {
-		request := &models.ChangeRequest{
-			Requester: &models.User{},
-			Approver:  &models.User{},
-		}
-		var approverName, approverEmail sql.NullString
-		err := rows.Scan(
-			&request.ID, &request.RequesterID, &request.Title, &request.Description,
-			&request.Status, &request.RequestData, &request.ApproverID, &request.ApprovedAt,
-			&request.CreatedAt, &request.UpdatedAt,
-			&request.Requester.Name, &request.Requester.Email,
-			&approverName, &approverEmail,
-		)
-		if err != nil {
-			return nil, 0, err
-		}
-
-		if approverName.Valid {
-			request.Approver.Name = approverName.String
-			request.Approver.Email = approverEmail.String
-		} else {
-			request.Approver = nil
-		}
-
-		requests = append(requests, request)
-	}
-
-	return requests, total, nil
+	request.ID = int(id)
+	return nil
 }
 
-// 申請取得（ID指定）
+// GetChangeRequestByID - 変更申請詳細取得
 func (s *ChangeRequestService) GetChangeRequestByID(id int) (*models.ChangeRequest, error) {
 	query := squirrel.Select(
-		"cr.id", "cr.requester_id", "cr.title", "cr.description", "cr.status", "cr.request_data",
-		"cr.approver_id", "cr.approved_at", "cr.created_at", "cr.updated_at",
-		"u1.name", "u1.email",
-		"u2.name", "u2.email",
+		"cr.id", "cr.requester_id", "cr.status", "cr.request_data", 
+		"cr.created_at", "cr.updated_at",
+		"u.name as requester_name", "u.email as requester_email",
 	).
 		From("change_requests cr").
-		LeftJoin("users u1 ON cr.requester_id = u1.id").
-		LeftJoin("users u2 ON cr.approver_id = u2.id").
+		LeftJoin("users u ON cr.requester_id = u.id").
 		Where(squirrel.Eq{"cr.id": id}).
 		PlaceholderFormat(squirrel.Question)
 
-	sql, args, err := query.ToSql()
+	sqlQuery, args, err := query.ToSql()
 	if err != nil {
 		return nil, err
 	}
 
-	request := &models.ChangeRequest{
-		Requester: &models.User{},
-		Approver:  &models.User{},
-	}
-	var approverName, approverEmail sql.NullString
-	err = s.db.QueryRow(sql, args...).Scan(
-		&request.ID, &request.RequesterID, &request.Title, &request.Description,
-		&request.Status, &request.RequestData, &request.ApproverID, &request.ApprovedAt,
+	var request models.ChangeRequest
+	var requester models.User
+	var requestDataJSON string
+	var requesterName, requesterEmail sql.NullString // 修正: sql.NullString を正しく参照
+
+	err = s.db.QueryRow(sqlQuery, args...).Scan(
+		&request.ID, &request.RequesterID, &request.Status, &requestDataJSON,
 		&request.CreatedAt, &request.UpdatedAt,
-		&request.Requester.Name, &request.Requester.Email,
-		&approverName, &approverEmail,
+		&requesterName, &requesterEmail,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	if approverName.Valid {
-		request.Approver.Name = approverName.String
-		request.Approver.Email = approverEmail.String
-	} else {
-		request.Approver = nil
+	// JSONをパース
+	err = json.Unmarshal([]byte(requestDataJSON), &request.RequestData)
+	if err != nil {
+		return nil, err
 	}
 
-	return request, nil
+	// リレーション設定
+	if requesterName.Valid {
+		requester.ID = request.RequesterID
+		requester.Name = requesterName.String
+		requester.Email = requesterEmail.String
+		request.Requester = &requester
+	}
+
+	return &request, nil
 }
 
-// 申請作成
-func (s *ChangeRequestService) CreateChangeRequest(requesterID int, req *models.CreateChangeRequestRequest) (*models.ChangeRequest, error) {
-	requestDataJSON, err := json.Marshal(req.RequestData)
-	if err != nil {
-		return nil, err
-	}
-
-	query := squirrel.Insert("change_requests").
-		Columns("requester_id", "title", "description", "request_data", "status").
-		Values(requesterID, req.Title, req.Description, requestDataJSON, models.StatusPending).
+// GetChangeRequests - 変更申請一覧取得
+func (s *ChangeRequestService) GetChangeRequests(filter models.RequestFilter) ([]models.ChangeRequest, error) {
+	query := squirrel.Select(
+		"cr.id", "cr.requester_id", "cr.status", "cr.request_data", 
+		"cr.created_at", "cr.updated_at",
+		"u.name as requester_name", "u.email as requester_email",
+	).
+		From("change_requests cr").
+		LeftJoin("users u ON cr.requester_id = u.id").
 		PlaceholderFormat(squirrel.Question)
 
-	sql, args, err := query.ToSql()
+	// フィルター条件を追加
+	if filter.Status != nil {
+		query = query.Where(squirrel.Eq{"cr.status": *filter.Status})
+	}
+	if filter.RequesterID != nil {
+		query = query.Where(squirrel.Eq{"cr.requester_id": *filter.RequesterID})
+	}
+	if filter.DateFrom != nil {
+		query = query.Where(squirrel.GtOrEq{"cr.created_at": *filter.DateFrom})
+	}
+	if filter.DateTo != nil {
+		query = query.Where(squirrel.LtOrEq{"cr.created_at": *filter.DateTo})
+	}
+
+	query = query.OrderBy("cr.created_at DESC")
+
+	sqlQuery, args, err := query.ToSql()
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := s.db.Exec(sql, args...)
+	rows, err := s.db.Query(sqlQuery, args...)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		return nil, err
-	}
+	var requests []models.ChangeRequest
+	for rows.Next() {
+		var request models.ChangeRequest
+		var requester models.User
+		var requestDataJSON string
+		var requesterName, requesterEmail sql.NullString // 修正: sql.NullString を正しく参照
 
-	return s.GetChangeRequestByID(int(id))
-}
-
-// 申請更新
-func (s *ChangeRequestService) UpdateChangeRequest(id int, req *models.UpdateChangeRequestRequest) (*models.ChangeRequest, error) {
-	query := squirrel.Update("change_requests").
-		Where(squirrel.Eq{"id": id}).
-		PlaceholderFormat(squirrel.Question)
-
-	if req.Title != "" {
-		query = query.Set("title", req.Title)
-	}
-	if req.Description != "" {
-		query = query.Set("description", req.Description)
-	}
-	if req.RequestData != nil {
-		requestDataJSON, err := json.Marshal(req.RequestData)
+		err := rows.Scan(
+			&request.ID, &request.RequesterID, &request.Status, &requestDataJSON,
+			&request.CreatedAt, &request.UpdatedAt,
+			&requesterName, &requesterEmail,
+		)
 		if err != nil {
 			return nil, err
 		}
-		query = query.Set("request_data", requestDataJSON)
+
+		// JSONをパース
+		err = json.Unmarshal([]byte(requestDataJSON), &request.RequestData)
+		if err != nil {
+			return nil, err
+		}
+
+		// リレーション設定
+		if requesterName.Valid {
+			requester.ID = request.RequesterID
+			requester.Name = requesterName.String
+			requester.Email = requesterEmail.String
+			request.Requester = &requester
+		}
+
+		requests = append(requests, request)
 	}
 
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = s.db.Exec(sql, args...)
-	if err != nil {
-		return nil, err
-	}
-
-	return s.GetChangeRequestByID(id)
+	return requests, nil
 }
 
-// 申請承認
-func (s *ChangeRequestService) ApproveChangeRequest(id, approverID int, comment string) (*models.ChangeRequest, error) {
-	now := time.Now()
+// UpdateChangeRequestStatus - 変更申請ステータス更新
+func (s *ChangeRequestService) UpdateChangeRequestStatus(id int, status string) error {
 	query := squirrel.Update("change_requests").
-		Set("status", models.StatusApproved).
-		Set("approver_id", approverID).
-		Set("approved_at", now).
+		Set("status", status).
+		Set("updated_at", time.Now()).
 		Where(squirrel.Eq{"id": id}).
 		PlaceholderFormat(squirrel.Question)
 
-	sql, args, err := query.ToSql()
+	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	result, err := s.db.Exec(sql, args...)
-	if err != nil {
-		return nil, err
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return nil, err
-	}
-
-	if rowsAffected == 0 {
-		return nil, fmt.Errorf("change request not found")
-	}
-
-	return s.GetChangeRequestByID(id)
+	_, err = s.db.Exec(sqlQuery, args...)
+	return err
 }
 
-// 申請却下
-func (s *ChangeRequestService) RejectChangeRequest(id, approverID int, comment string) (*models.ChangeRequest, error) {
-	now := time.Now()
-	query := squirrel.Update("change_requests").
-		Set("status", models.StatusRejected).
-		Set("approver_id", approverID).
-		Set("approved_at", now).
-		Where(squirrel.Eq{"id": id}).
-		PlaceholderFormat(squirrel.Question)
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, err
-	}
-
-	result, err := s.db.Exec(sql, args...)
-	if err != nil {
-		return nil, err
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return nil, err
-	}
-
-	if rowsAffected == 0 {
-		return nil, fmt.Errorf("change request not found")
-	}
-
-	return s.GetChangeRequestByID(id)
+// ApproveChangeRequest - 変更申請承認
+func (s *ChangeRequestService) ApproveChangeRequest(id int) error {
+	return s.UpdateChangeRequestStatus(id, "approved")
 }
 
-// 申請削除
+// RejectChangeRequest - 変更申請却下
+func (s *ChangeRequestService) RejectChangeRequest(id int) error {
+	return s.UpdateChangeRequestStatus(id, "rejected")
+}
+
+// DeleteChangeRequest - 変更申請削除
 func (s *ChangeRequestService) DeleteChangeRequest(id int) error {
 	query := squirrel.Delete("change_requests").
 		Where(squirrel.Eq{"id": id}).
 		PlaceholderFormat(squirrel.Question)
 
-	sql, args, err := query.ToSql()
+	sqlQuery, args, err := query.ToSql()
 	if err != nil {
 		return err
 	}
 
-	result, err := s.db.Exec(sql, args...)
-	if err != nil {
-		return err
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rowsAffected == 0 {
-		return fmt.Errorf("change request not found")
-	}
-
-	return nil
+	_, err = s.db.Exec(sqlQuery, args...)
+	return err
 }

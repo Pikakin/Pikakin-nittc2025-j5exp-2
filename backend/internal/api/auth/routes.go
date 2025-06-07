@@ -1,7 +1,7 @@
 package auth
 
 import (
-	"timetable-change-system/internal/middleware"
+	"kosen-schedule-system/internal/middleware"
 
 	"github.com/labstack/echo/v4"
 )

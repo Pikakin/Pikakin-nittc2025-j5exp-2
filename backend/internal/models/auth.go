@@ -1,9 +1,8 @@
 package models
 
-// 認証関連の構造体
 type LoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,min=6"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 type LoginResponse struct {
@@ -15,5 +14,7 @@ type LoginResponse struct {
 type AuthResponse struct {
 	Success bool        `json:"success"`
 	Data    interface{} `json:"data,omitempty"`
-	Message string      `json:"message"`
+	Message string      `json:"message,omitempty"`
 }
+
+// User型とChangePasswordRequest型は削除（user.goで定義済み）

@@ -3,8 +3,8 @@ package auth
 import (
 	"net/http"
 
-	"timetable-change-system/internal/models"
-	"timetable-change-system/internal/services"
+	"kosen-schedule-system/internal/models"
+	"kosen-schedule-system/internal/services"
 
 	"github.com/labstack/echo/v4"
 )

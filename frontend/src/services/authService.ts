@@ -66,7 +66,7 @@ export const authService = {
       };
     } catch (error) {
       console.error('Login error:', error);
-      throw new Error(handleApiError(error));
+      throw error;
     }
   },
 

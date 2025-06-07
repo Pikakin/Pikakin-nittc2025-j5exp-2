@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"timetable-change-system/internal/models"
+	"kosen-schedule-system/internal/models"
 
 	"github.com/Masterminds/squirrel"
 )

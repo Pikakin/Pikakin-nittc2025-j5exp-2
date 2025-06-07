@@ -3,42 +3,18 @@ import {
   Container,
   Typography,
   Box,
-  Alert,
-  CircularProgress,
-  Paper,
   Tabs,
   Tab,
-  Button
+  Alert,
+  CircularProgress,
+  Paper
 } from '@mui/material';
-import { Add as AddIcon, Refresh as RefreshIcon } from '@mui/icons-material';
+import { useAuth } from '../../contexts/AuthContext';
 import { TimetableGrid } from '../../components/timetable/TimetableGrid';
-import { TimetableFilterComponent } from '../../components/timetable/TimetableFilter';
+import { TimetableFilter } from '../../components/timetable/TimetableFilter';
 import { timetableService } from '../../services/timetableService';
 import { classService } from '../../services/classService';
-import { useAuth } from '../../contexts/AuthContext';
-import { Timetable, TimetableFilterParams, WeeklyTimetable } from '../../types';
-
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`timetable-tabpanel-${index}`}
-      aria-labelledby={`timetable-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-    </div>
-  );
-}
+import { Timetable, WeeklyTimetable, TimetableFilterParams, Class } from '../../types';
 
 export const ScheduleListPage: React.FC = () => {
   const { authState } = useAuth();
@@ -46,7 +22,7 @@ export const ScheduleListPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [timetables, setTimetables] = useState<Timetable[]>([]);
   const [weeklyTimetable, setWeeklyTimetable] = useState<WeeklyTimetable>({});
-  const [classes, setClasses] = useState<Array<{ id: number; grade: number; class_name: string }>>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
   const [filter, setFilter] = useState<TimetableFilterParams>({});
   const [tabValue, setTabValue] = useState(0);
 
@@ -62,26 +38,26 @@ export const ScheduleListPage: React.FC = () => {
 
       // クラス一覧を取得
       const classesResponse = await classService.getClasses();
-      setClasses(classesResponse);
+      console.log('Classes response:', classesResponse);
+      
+      // null チェックを追加
+      if (classesResponse && Array.isArray(classesResponse)) {
+        setClasses(classesResponse);
 
-      // デフォルトで時間割一覧を取得
-      await loadTimetables();
+        // デフォルトで1年1組の週間時間割を表示
+        if (classesResponse.length > 0) {
+          const firstClass = classesResponse[0];
+          setFilter({ class_id: firstClass.id });
+          await loadWeeklyTimetable(firstClass.id);
+        }
+      } else {
+        console.warn('Classes response is not an array:', classesResponse);
+        setClasses([]);
+      }
     } catch (err: any) {
-      setError(err.message || '初期データの読み込みに失敗しました');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadTimetables = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await timetableService.getTimetables(filter);
-      setTimetables(response);
-    } catch (err: any) {
-      setError(err.message || '時間割の取得に失敗しました');
+      console.error('Failed to load initial data:', err);
+      setError('データの読み込みに失敗しました: ' + (err.message || '不明なエラー'));
+      setClasses([]); // エラー時も空配列を設定
     } finally {
       setLoading(false);
     }
@@ -90,12 +66,42 @@ export const ScheduleListPage: React.FC = () => {
   const loadWeeklyTimetable = async (classId: number) => {
     try {
       setLoading(true);
-      setError(null);
-
-      const response = await timetableService.getWeeklyTimetable(classId);
-      setWeeklyTimetable(response);
+      const weekly = await timetableService.getWeeklyTimetable(classId);
+      console.log('Weekly timetable response:', weekly);
+      
+      // null チェックを追加
+      if (weekly && typeof weekly === 'object') {
+        setWeeklyTimetable(weekly);
+      } else {
+        console.warn('Weekly timetable response is invalid:', weekly);
+        setWeeklyTimetable({});
+      }
     } catch (err: any) {
-      setError(err.message || '週間時間割の取得に失敗しました');
+      console.error('Failed to load weekly timetable:', err);
+      setError('週間時間割の読み込みに失敗しました: ' + (err.message || '不明なエラー'));
+      setWeeklyTimetable({}); // エラー時も空オブジェクトを設定
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadTimetables = async () => {
+    try {
+      setLoading(true);
+      const timetablesResponse = await timetableService.getTimetables(filter);
+      console.log('Timetables response:', timetablesResponse);
+      
+      // null チェックを追加
+      if (timetablesResponse && Array.isArray(timetablesResponse)) {
+        setTimetables(timetablesResponse);
+      } else {
+        console.warn('Timetables response is not an array:', timetablesResponse);
+        setTimetables([]);
+      }
+    } catch (err: any) {
+      console.error('Failed to load timetables:', err);
+      setError('時間割の読み込みに失敗しました: ' + (err.message || '不明なエラー'));
+      setTimetables([]); // エラー時も空配列を設定
     } finally {
       setLoading(false);
     }
@@ -106,167 +112,126 @@ export const ScheduleListPage: React.FC = () => {
   };
 
   const handleApplyFilter = () => {
-    if (tabValue === 0) {
-      loadTimetables();
-    } else if (filter.class_id) {
+    if (tabValue === 0 && filter.class_id) {
+      // 週間表示の場合
       loadWeeklyTimetable(filter.class_id);
+    } else {
+      // 一覧表示の場合
+      loadTimetables();
     }
   };
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
-    if (newValue === 1 && filter.class_id) {
+    if (newValue === 0 && filter.class_id) {
       loadWeeklyTimetable(filter.class_id);
-    }
-  };
-
-  const handleRefresh = () => {
-    if (tabValue === 0) {
+    } else if (newValue === 1) {
       loadTimetables();
-    } else if (filter.class_id) {
-      loadWeeklyTimetable(filter.class_id);
     }
   };
 
-  const canCreateTimetable = authState.user?.role === 'admin';
+  const getSelectedClassName = () => {
+    if (filter.class_id && classes && classes.length > 0) {
+      const selectedClass = classes.find(c => c.id === filter.class_id);
+      return selectedClass ? `${selectedClass.grade}-${selectedClass.class_name}` : '';
+    }
+    return '';
+  };
 
-  return (
-    <Container maxWidth="xl">
-      <Box sx={{ py: 3 }}>
-        {/* ヘッダー */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Typography variant="h4" component="h1">
-            時間割管理
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button
-              variant="outlined"
-              startIcon={<RefreshIcon />}
-              onClick={handleRefresh}
-              disabled={loading}
-            >
-              更新
-            </Button>
-            {canCreateTimetable && (
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => {
-                  console.log('時間割作成ページへ遷移');
-                }}
-              >
-                時間割作成
-              </Button>
-            )}
-          </Box>
-        </Box>
-
-        {/* エラー表示 */}
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-
-        {/* フィルター */}
-        <Paper sx={{ p: 2, mb: 2 }}>
-          <TimetableFilterComponent
-            filter={filter}
-            onFilterChange={handleFilterChange}
-            onApplyFilter={handleApplyFilter}
-            classes={classes}
-          />
-        </Paper>
-
-        {/* タブ */}
-        <Paper sx={{ mb: 2 }}>
-          <Tabs value={tabValue} onChange={handleTabChange} aria-label="時間割表示タブ">
-            <Tab label="一覧表示" />
-            <Tab label="週間表示" disabled={!filter.class_id} />
-          </Tabs>
-        </Paper>
-
-        {/* ローディング */}
-        {loading && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-            <CircularProgress />
-          </Box>
-        )}
-
-        {/* コンテンツ */}
-        {!loading && (
-          <>
-            <TabPanel value={tabValue} index={0}>
-              <TimetableListView timetables={timetables} />
-            </TabPanel>
-            <TabPanel value={tabValue} index={1}>
-              {filter.class_id ? (
-                <TimetableGrid weeklyTimetable={weeklyTimetable} />
-              ) : (
-                <Alert severity="info">
-                  クラスを選択してください
-                </Alert>
-              )}
-            </TabPanel>
-          </>
-        )}
-      </Box>
-    </Container>
-  );
-};
-
-// 時間割一覧表示コンポーネント
-const TimetableListView: React.FC<{ timetables: Timetable[] }> = ({ timetables }) => {
-  if (timetables.length === 0) {
+  // 初期ローディング中
+  if (loading && (!classes || classes.length === 0) && (!timetables || timetables.length === 0)) {
     return (
-      <Alert severity="info">
-        時間割データがありません
-      </Alert>
+      <Container maxWidth="lg" sx={{ mt: 4, display: 'flex', justifyContent: 'center' }}>
+        <CircularProgress />
+      </Container>
     );
   }
 
   return (
-    <Box>
-      {timetables.map((timetable) => (
-        <Paper key={timetable.id} sx={{ p: 2, mb: 2 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <Box>
-              <Typography variant="h6" sx={{ mb: 1 }}>
-                {timetable.subject?.name || '科目名'}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                クラス: {timetable.class?.grade}年{timetable.class?.class_name}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                担当: {timetable.teacher?.name || '担当者'}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                時間: {getDayLabel(timetable.day)}曜日 {timetable.period}限
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                教室: {timetable.room}
-              </Typography>
-            </Box>
-            <Box sx={{ textAlign: 'right' }}>
-              <Typography variant="caption" color="text.secondary">
-                科目コード: {timetable.subject?.code}
-              </Typography>
-            </Box>
-          </Box>
-        </Paper>
-      ))}
-    </Box>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Typography variant="h4" component="h1" gutterBottom>
+        時間割表示
+      </Typography>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      {/* フィルター */}
+      <Paper sx={{ p: 3, mb: 3 }}>
+        <TimetableFilter
+          filter={filter}
+          classes={classes || []} // null の場合は空配列
+          onFilterChange={handleFilterChange}
+          onApplyFilter={handleApplyFilter}
+        />
+      </Paper>
+
+      {/* タブ */}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+        <Tabs value={tabValue} onChange={handleTabChange}>
+          <Tab label="週間表示" />
+          <Tab label="一覧表示" />
+        </Tabs>
+      </Box>
+
+      {/* コンテンツ */}
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : (
+        <>
+          {tabValue === 0 && (
+            <TimetableGrid 
+              weeklyTimetable={weeklyTimetable || {}} // null の場合は空オブジェクト
+              className={getSelectedClassName()}
+            />
+          )}
+          
+          {tabValue === 1 && (
+            <Paper sx={{ p: 2 }}>
+              {timetables && timetables.length > 0 ? (
+                <Box>
+                  <Typography variant="h6" gutterBottom>
+                    時間割一覧 ({timetables.length}件)
+                  </Typography>
+                  <Box sx={{ mt: 2 }}>
+                    {timetables.map((timetable) => (
+                      <Box key={timetable.id} sx={{ mb: 2, p: 2, border: 1, borderColor: 'grey.300', borderRadius: 1 }}>
+                        <Typography variant="subtitle1">
+                          {timetable.grade}-{timetable.class_name} | {getDayLabel(timetable.day_of_week)} {timetable.period}限
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          科目: {timetable.subject_name} | 教員: {timetable.teacher_name} | 教室: {timetable.room}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              ) : (
+                <Typography variant="body1" color="text.secondary" align="center" sx={{ py: 4 }}>
+                  条件に一致する時間割がありません
+                </Typography>
+              )}
+            </Paper>
+          )}
+        </>
+      )}
+    </Container>
   );
 };
 
-// 曜日ラベル取得関数
+// ヘルパー関数
 const getDayLabel = (day: string): string => {
   const dayMap: { [key: string]: string } = {
-    monday: '月',
-    tuesday: '火',
-    wednesday: '水',
-    thursday: '木',
-    friday: '金'
+    'monday': '月',
+    'tuesday': '火',
+    'wednesday': '水',
+    'thursday': '木',
+    'friday': '金'
   };
   return dayMap[day] || day;
 };
