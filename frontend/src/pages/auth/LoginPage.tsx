@@ -11,7 +11,7 @@ export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { authState, login, clearError } = useAuth();
   
-  // フォーム状態
+  // フォーム状態（emailに統一）
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [formErrors, setFormErrors] = useState({
@@ -51,7 +51,7 @@ export const LoginPage: React.FC = () => {
     return valid;
   };
   
-  // ログイン処理
+  // ログイン処理（修正）
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -66,7 +66,7 @@ export const LoginPage: React.FC = () => {
     // デバッグログ修正
     console.log('Attempting login with:', { email, password });
     
-    // ログイン実行（emailとして渡す）
+    // ログイン実行（emailに統一）
     await login(email, password);
   };
   

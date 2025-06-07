@@ -10,6 +10,7 @@ import { RequestCreatePage } from './pages/request/RequestCreatePage';
 import { RequestDetailPage } from './pages/request/RequestDetailPage';
 import { RequestListPage } from './pages/request/RequestListPage';
 import { ScheduleListPage } from './pages/schedule/ScheduleListPage';
+import { CSVManagePage } from './pages/csv/CSVManagePage';
 
 // 認証が必要なルートのラッパー
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -99,6 +100,14 @@ export const getRoutes = (): RouteObject[] => [
         )
       },
       {
+        path: 'csv',
+        element: (
+          <AdminRoute>
+            <CSVManagePage />
+          </AdminRoute>
+        )
+      },
+      {
         path: 'profile',
         element: <ProfilePage />
       },
@@ -109,4 +118,3 @@ export const getRoutes = (): RouteObject[] => [
     ]
   }
 ];
-

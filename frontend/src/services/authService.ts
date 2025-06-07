@@ -7,19 +7,8 @@ interface LoginResponse {
   user: User;
 }
 
-// APIエラーハンドリング関数
-const handleApiError = (error: any): string => {
-  if (error.response?.data?.message) {
-    return error.response.data.message;
-  }
-  if (error.message) {
-    return error.message;
-  }
-  return '予期せぬエラーが発生しました';
-};
-
 export const authService = {
-  // ログイン
+  // ログイン（パラメータ名をemailに統一）
   login: async (email: string, password: string) => {
     try {
       console.log('Sending login request with:', { email, password });
@@ -76,7 +65,7 @@ export const authService = {
       const response = await api.get<{ data: User }>('/auth/me');
       return response.data;
     } catch (error) {
-      throw new Error(handleApiError(error));
+      throw new Error('ユーザー情報の取得に失敗しました');
     }
   },
   
@@ -89,7 +78,7 @@ export const authService = {
       });
       return response.data;
     } catch (error) {
-      throw new Error(handleApiError(error));
+      throw new Error('パスワード変更に失敗しました');
     }
   },
   
@@ -101,7 +90,7 @@ export const authService = {
       });
       return response.data;
     } catch (error) {
-      throw new Error(handleApiError(error));
+      throw new Error('パスワードリセット要求に失敗しました');
     }
   },
   
@@ -114,10 +103,11 @@ export const authService = {
       });
       return response.data;
     } catch (error) {
-      throw new Error(handleApiError(error));
+      throw new Error('パスワードリセットに失敗しました');
     }
   }
 };
+
 
 // handleApiError関数をエクスポート
 export { handleApiError };

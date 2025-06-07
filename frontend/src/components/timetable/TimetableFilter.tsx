@@ -6,7 +6,7 @@ import {
   Select,
   MenuItem,
   Button,
-  Grid,
+  Grid, 
   SelectChangeEvent
 } from '@mui/material';
 import { TimetableFilterParams, Class } from '../../types';
@@ -46,7 +46,7 @@ export const TimetableFilter: React.FC<TimetableFilterProps> = ({
   return (
     <Box sx={{ mb: 3 }}>
       <Grid container spacing={2} alignItems="center">
-        <Grid item xs={12} sm={6} md={2}>
+        <Grid size={{ xs: 12, sm: 6, md: 2 }}>
           <FormControl fullWidth size="small">
             <InputLabel>学年</InputLabel>
             <Select
@@ -64,7 +64,7 @@ export const TimetableFilter: React.FC<TimetableFilterProps> = ({
           </FormControl>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <FormControl fullWidth size="small">
             <InputLabel>クラス</InputLabel>
             <Select
@@ -73,7 +73,7 @@ export const TimetableFilter: React.FC<TimetableFilterProps> = ({
               onChange={handleChange('class_id')}
             >
               <MenuItem value="">全て</MenuItem>
-              {classes.map((cls) => (
+              {classes && classes.map((cls) => (
                 <MenuItem key={cls.id} value={cls.id}>
                   {cls.grade}-{cls.class_name}
                 </MenuItem>
@@ -82,7 +82,7 @@ export const TimetableFilter: React.FC<TimetableFilterProps> = ({
           </FormControl>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={2}>
+        <Grid size={{ xs: 12, sm: 6, md: 2 }}>
           <FormControl fullWidth size="small">
             <InputLabel>曜日</InputLabel>
             <Select
@@ -100,7 +100,7 @@ export const TimetableFilter: React.FC<TimetableFilterProps> = ({
           </FormControl>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={2}>
+        <Grid size={{ xs: 12, sm: 6, md: 2 }}>
           <Button
             variant="contained"
             onClick={onApplyFilter}

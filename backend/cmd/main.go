@@ -7,13 +7,15 @@ import (
 	"net/http"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	"kosen-schedule-system/internal/api/csv"
 	"kosen-schedule-system/internal/api/timetable"
 	"kosen-schedule-system/internal/config"
 	"kosen-schedule-system/internal/models"
 	"kosen-schedule-system/internal/services"
+
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 func main() {
@@ -62,6 +64,17 @@ func main() {
 	// クラス関連エンドポイント（新規追加）
 	api.GET("/classes", timetableHandler.GetClasses)
 	api.GET("/classes/:id", timetableHandler.GetClassByID)
+
+	// CSV関連のルート追加（修正版）
+	csvService := services.NewCSVService(db.DB)
+	csvHandler := csv.NewHandler(csvService)
+
+	// CSV API エンドポイント（認証なしで一時的に動作確認）
+	csvGroup := api.Group("/csv")
+	csvGroup.POST("/import/subjects", csvHandler.ImportSubjects)
+	csvGroup.POST("/import/timetables", csvHandler.ImportTimetables)
+	csvGroup.GET("/export/timetables", csvHandler.ExportTimetables)
+	csvGroup.GET("/export/subjects", csvHandler.ExportSubjects)
 
 	// サーバー起動
 	log.Println("Server starting on :8080...")

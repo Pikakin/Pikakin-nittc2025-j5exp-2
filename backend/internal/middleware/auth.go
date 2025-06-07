@@ -96,3 +96,17 @@ func (m *AuthMiddleware) RequireStudent(next echo.HandlerFunc) echo.HandlerFunc 
 		return next(c)
 	})
 }
+
+// 権限チェックミドルウェア追加
+
+func RequireRole(requiredRole string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			userRole := c.Get("user_role")
+			if userRole != requiredRole {
+				return echo.NewHTTPError(http.StatusForbidden, "Insufficient permissions")
+			}
+			return next(c)
+		}
+	}
+}

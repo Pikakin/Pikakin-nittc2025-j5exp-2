@@ -1,23 +1,25 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
+  Box,
   Container,
   Typography,
-  Box,
   Grid,
-  Paper,
   Card,
   CardContent,
   CardActions,
-  Button
+  Button,
+  Avatar,
+  Chip
 } from '@mui/material';
 import {
   Schedule as ScheduleIcon,
   Assignment as AssignmentIcon,
   People as PeopleIcon,
-  Notifications as NotificationsIcon
+  Notifications as NotificationsIcon,
+  CloudUpload as CloudUploadIcon  // 追加
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
 
 export const DashboardPage: React.FC = () => {
   const { authState } = useAuth();
@@ -63,6 +65,13 @@ export const DashboardPage: React.FC = () => {
           icon: <PeopleIcon sx={{ fontSize: 40 }} />,
           path: '/users',
           color: 'success.main'
+        },
+        {
+          title: 'CSV管理',
+          description: '担当者・時間割データのインポート/エクスポート',
+          icon: <CloudUploadIcon sx={{ fontSize: 40 }} />,
+          path: '/csv',
+          color: 'warning.main'
         }
       ];
     }
@@ -103,60 +112,53 @@ export const DashboardPage: React.FC = () => {
           </Typography>
         </Box>
 
-        {/* 統計情報 */}
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} sm={6} md={3}>
-            <Paper sx={{ p: 2, textAlign: 'center' }}>
-              <Typography variant="h4" color="primary.main" sx={{ mb: 1 }}>
-                25
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                今週の授業数
-              </Typography>
-            </Paper>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Paper sx={{ p: 2, textAlign: 'center' }}>
-              <Typography variant="h4" color="secondary.main" sx={{ mb: 1 }}>
-                3
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                未処理の申請
-              </Typography>
-            </Paper>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Paper sx={{ p: 2, textAlign: 'center' }}>
-              <Typography variant="h4" color="success.main" sx={{ mb: 1 }}>
-                12
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                今月の変更件数
-              </Typography>
-            </Paper>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Paper sx={{ p: 2, textAlign: 'center' }}>
-              <Typography variant="h4" color="warning.main" sx={{ mb: 1 }}>
-                2
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                新着通知
-              </Typography>
-            </Paper>
-          </Grid>
-        </Grid>
+        {/* ユーザー情報カード */}
+        <Card sx={{ mb: 4 }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Avatar sx={{ bgcolor: 'primary.main', width: 56, height: 56 }}>
+                {authState.user?.name?.charAt(0)}
+              </Avatar>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="h6">
+                  {authState.user?.name}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {authState.user?.email}
+                </Typography>
+                <Chip 
+                  label={getRoleLabel(authState.user?.role || '')}
+                  color={authState.user?.role === 'admin' ? 'error' : 
+                         authState.user?.role === 'teacher' ? 'warning' : 'info'}
+                  size="small"
+                  sx={{ mt: 1 }}
+                />
+              </Box>
+            </Box>
+          </CardContent>
+        </Card>
 
         {/* メニューカード */}
         <Grid container spacing={3}>
           {getMenuItems().map((item, index) => (
             <Grid item xs={12} sm={6} md={4} key={index}>
-              <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <CardContent sx={{ flexGrow: 1, textAlign: 'center', py: 3 }}>
+              <Card 
+                sx={{ 
+                  height: '100%',
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: 4
+                  }
+                }}
+                onClick={() => navigate(item.path)}
+              >
+                <CardContent sx={{ textAlign: 'center', py: 3 }}>
                   <Box sx={{ color: item.color, mb: 2 }}>
                     {item.icon}
                   </Box>
-                  <Typography variant="h6" component="h2" sx={{ mb: 1 }}>
+                  <Typography variant="h6" gutterBottom>
                     {item.title}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -164,10 +166,10 @@ export const DashboardPage: React.FC = () => {
                   </Typography>
                 </CardContent>
                 <CardActions sx={{ justifyContent: 'center', pb: 2 }}>
-                  <Button
-                    variant="contained"
-                    onClick={() => navigate(item.path)}
-                    sx={{ bgcolor: item.color }}
+                  <Button 
+                    variant="outlined" 
+                    size="small"
+                    sx={{ borderColor: item.color, color: item.color }}
                   >
                     開く
                   </Button>
@@ -176,6 +178,20 @@ export const DashboardPage: React.FC = () => {
             </Grid>
           ))}
         </Grid>
+
+        {/* 最近の活動（将来の拡張用） */}
+        <Box sx={{ mt: 4 }}>
+          <Typography variant="h6" gutterBottom>
+            最近の活動
+          </Typography>
+          <Card>
+            <CardContent>
+              <Typography variant="body2" color="text.secondary">
+                最近の活動はありません
+              </Typography>
+            </CardContent>
+          </Card>
+        </Box>
       </Box>
     </Container>
   );

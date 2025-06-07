@@ -13,7 +13,7 @@ type AuthAction =
   | { type: 'LOAD_USER_SUCCESS'; payload: User }
   | { type: 'LOAD_USER_FAILURE'; payload: string };
 
-// 認証コンテキストの型
+// 認証コンテキストの型（修正: email パラメータに統一）
 interface AuthContextType {
   authState: AuthState;
   login: (email: string, password: string) => Promise<void>;
@@ -105,7 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadUser();
   }, []);
 
-  // ログイン処理
+  // ログイン処理（修正: email パラメータに統一）
   const login = async (email: string, password: string) => {
     try {
       dispatch({ type: 'LOGIN_REQUEST' });
